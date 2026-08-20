@@ -1,0 +1,173 @@
+# Databricks Medallion Architecture Pipeline — Cursor Rules
+
+You are assisting with an e-commerce sales data pipeline on Databricks using the Medallion Architecture.
+
+## 1. Language
+
+- Python 3.9+
+- PySpark for distributed data processing
+- SQL for Gold-layer aggregations and dashboard queries
+
+## 2. Framework
+
+- Target **Databricks Community Edition** compatibility
+- Use Spark APIs and Delta Lake features available on Community Edition
+- Avoid proprietary or cluster-specific features that require paid tiers
+- Prefer `spark.sql()` and DataFrame APIs over unsupported extensions
+
+## 3. Architecture
+
+Follow the Medallion layers strictly — never skip a layer:
+
+```
+CSV Sources → Bronze → Silver → Gold → Dashboard
+```
+
+| Layer | Location | Responsibility |
+|-------|----------|----------------|
+| Bronze | `src/bronze/` | Raw ingestion from CSV; minimal transformation |
+| Silver | `src/silver/` | Cleansing, standardization, data quality checks |
+| Gold | `src/gold/` | Business aggregations and analytical tables |
+| Dashboard | `src/dashboard/` | Reporting SQL and BI guidance |
+
+Rules:
+- Do not write directly from CSV to Gold
+- Data quality checks belong in Silver, not Bronze or Gold
+- Gold reads only from Silver tables
+- Bronze preserves source fidelity; Silver adds `quality_check_result`
+
+## 4. Code Style
+
+- Follow **PEP 8**
+- Use **type hints** on all function parameters and return values
+- Every function must have a **docstring** (Google or NumPy style)
+- Match existing file naming: numbered prefixes (`01_`, `02_`) for ordered scripts
+
+## 5. Naming Conventions
+
+| Element | Convention | Example |
+|---------|------------|---------|
+| Tables | `bronze_*`, `silver_*`, `gold_*` | `bronze_orders`, `silver_customers` |
+| Functions | `snake_case` | `ingest_customers()`, `validate_completeness()` |
+| Constants | `UPPER_CASE` | `BRONZE_SCHEMA`, `SOURCE_PATH` |
+
+Do not use camelCase for functions or variables. Schema prefixes must match the Medallion layer.
+
+## 6. Required Script Structure
+
+Every Python script must include:
+
+1. **Module docstring** — purpose, layer, inputs, outputs, and execution context
+2. **Error handling** — `try`/`except` around I/O, Spark operations, and writes; log errors before re-raising or exiting cleanly
+3. **Logging** — use `print()` for simple Community Edition notebooks, or the `logging` module for jobs; log start/end, key parameters, and outcomes
+4. **Row count verification** — count rows before and after each major read, transform, and write; log counts explicitly
+
+Example pattern:
+
+```python
+"""Bronze layer: ingest customers CSV into Delta table bronze_customers."""
+
+import logging
+from pyspark.sql import DataFrame, SparkSession
+
+logger = logging.getLogger(__name__)
+SOURCE_TABLE = "bronze_customers"
+
+
+def ingest_customers(spark: SparkSession, source_path: str) -> int:
+  """Read customers CSV and write to bronze_customers Delta table.
+
+  Args:
+    spark: Active SparkSession.
+    source_path: Path to customers.csv.
+
+  Returns:
+    Number of rows written.
+  """
+  try:
+    df = spark.read.csv(source_path, header=True, inferSchema=True)
+    input_count = df.count()
+    logger.info("Read %d rows from %s", input_count, source_path)
+
+  except Exception as exc:
+    logger.error("Failed to read source: %s", exc)
+    raise
+
+  try:
+    df.write.format("delta").mode("overwrite").saveAsTable(SOURCE_TABLE)
+    output_count = spark.table(SOURCE_TABLE).count()
+    logger.info("Wrote %d rows to %s", output_count, SOURCE_TABLE)
+
+  except Exception as exc:
+    logger.error("Failed to write %s: %s", SOURCE_TABLE, exc)
+    raise
+
+  return output_count
+```
+
+## 7. Data Format
+
+- **Input**: CSV files from `data/` (`customers.csv`, `orders.csv`, `products.csv`)
+- **Output**: Delta Lake tables (not Parquet-only or CSV outputs for pipeline tables)
+- Use explicit schemas or validated inference in Bronze; enforce types in Silver
+
+## 8. Quality Checks
+
+- **Never delete or drop bad rows** — retain all records for auditability
+- Flag issues with a `quality_check_result` column (e.g. `PASS`, `FAIL_COMPLETENESS`, `FAIL_REFERENTIAL_INTEGRITY`)
+- Failed rows stay in Silver output; downstream Gold logic should filter on `quality_check_result = 'PASS'` where appropriate
+- Log counts of passed vs. failed records after each quality check
+
+## 9. Comments
+
+- Explain **why** a decision was made, not what the code literally does
+- Avoid redundant comments on obvious operations (`# read csv` is unnecessary)
+- Document business rules, DQ thresholds, and layer-boundary rationale
+
+## 10. SQL
+
+- Prefer **CTEs** over nested subqueries for readability and maintainability
+- **Always alias columns clearly** — no ambiguous `SELECT *` in production queries
+- Gold SQL lives in `src/gold/*.sql`; dashboard queries in `src/dashboard/dashboard_queries.sql`
+- Gold tables use `gold_*` naming; source from `silver_*` tables only
+
+Example:
+
+```sql
+WITH valid_orders AS (
+  SELECT
+    o.order_id,
+    o.customer_id,
+    o.product_id,
+    o.quantity,
+    o.total_amount,
+    o.order_date
+  FROM silver_orders AS o
+  WHERE o.quality_check_result = 'PASS'
+),
+product_sales AS (
+  SELECT
+    vo.product_id,
+    SUM(vo.quantity) AS total_quantity,
+    SUM(vo.total_amount) AS total_revenue
+  FROM valid_orders AS vo
+  GROUP BY vo.product_id
+)
+SELECT
+  p.product_id,
+  p.name AS product_name,
+  p.category AS product_category,
+  ps.total_quantity,
+  ps.total_revenue
+FROM product_sales AS ps
+INNER JOIN silver_products AS p
+  ON ps.product_id = p.product_id
+WHERE p.quality_check_result = 'PASS';
+```
+
+## Additional Guidelines
+
+- No hardcoded credentials, tokens, or workspace URLs — use configuration parameters
+- Update `data-model.md` when schemas change; update `data-quality-strategy.md` when DQ rules change
+- Validate against sample data in `data/` before production runs
+- Keep changes minimal and layer-scoped; do not refactor unrelated files
