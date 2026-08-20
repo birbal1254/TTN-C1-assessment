@@ -1,0 +1,12 @@
+-- Gold layer: Daily and weekly sales trends
+-- Placeholder: Time-series aggregates for trend analysis
+
+-- TODO: CREATE OR REPLACE TABLE gold.daily_weekly_trends AS
+-- SELECT
+--   DATE(o.order_date) AS order_day,
+--   YEAR(o.order_date) AS year,
+--   WEEKOFYEAR(o.order_date) AS week,
+--   COUNT(o.order_id) AS order_count,
+--   SUM(o.total_amount) AS daily_revenue
+-- FROM silver.orders o
+-- GROUP BY DATE(o.order_date), YEAR(o.order_date), WEEKOFYEAR(o.order_date);

@@ -1,0 +1,17 @@
+-- Gold layer: Customer segmentation
+-- Placeholder: Segment customers by revenue tiers or behavior
+
+-- TODO: CREATE OR REPLACE TABLE gold.customer_segmentation AS
+-- SELECT
+--   c.customer_id,
+--   c.name,
+--   c.country,
+--   SUM(o.total_amount) AS lifetime_revenue,
+--   CASE
+--     WHEN SUM(o.total_amount) >= 1000 THEN 'high_value'
+--     WHEN SUM(o.total_amount) >= 100 THEN 'medium_value'
+--     ELSE 'low_value'
+--   END AS revenue_segment
+-- FROM silver.customers c
+-- JOIN silver.orders o ON c.customer_id = o.customer_id
+-- GROUP BY c.customer_id, c.name, c.country;
