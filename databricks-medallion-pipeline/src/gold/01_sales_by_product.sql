@@ -1,0 +1,13 @@
+-- Gold layer: Sales aggregated by product
+-- Placeholder: Total quantity and revenue per product
+
+-- TODO: CREATE OR REPLACE TABLE gold.sales_by_product AS
+-- SELECT
+--   p.product_id,
+--   p.name AS product_name,
+--   p.category,
+--   SUM(o.quantity) AS total_quantity,
+--   SUM(o.total_amount) AS total_revenue
+-- FROM silver.orders o
+-- JOIN silver.products p ON o.product_id = p.product_id
+-- GROUP BY p.product_id, p.name, p.category;

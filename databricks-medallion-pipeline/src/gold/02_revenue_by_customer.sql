@@ -1,0 +1,13 @@
+-- Gold layer: Revenue aggregated by customer
+-- Placeholder: Total orders and revenue per customer
+
+-- TODO: CREATE OR REPLACE TABLE gold.revenue_by_customer AS
+-- SELECT
+--   c.customer_id,
+--   c.name AS customer_name,
+--   c.country,
+--   COUNT(o.order_id) AS order_count,
+--   SUM(o.total_amount) AS total_revenue
+-- FROM silver.customers c
+-- JOIN silver.orders o ON c.customer_id = o.customer_id
+-- GROUP BY c.customer_id, c.name, c.country;
