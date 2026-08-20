@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 from pyspark.sql import DataFrame, SparkSession, Window
-from pyspark.sql.functions import col, count, lit, row_number, when
+from pyspark.sql.functions import col, count, lit, when
 
 logger = logging.getLogger(__name__)
 
@@ -104,33 +104,31 @@ def flag_uniqueness(
     ingestion_timestamp_col: str = INGESTION_TIMESTAMP,
 ) -> DataFrame:
     """
-    Flag duplicate primary keys using row_number over a Window partition.
+    Flag duplicate primary keys using a Window partition count.
 
-    First occurrence (row_number == 1) → PASS.
-    Subsequent duplicates (row_number > 1) → FAIL: DUPLICATE {primary_key}.
+    Rows with a unique primary key → PASS.
+    All rows sharing a duplicated key → FAIL: DUPLICATE {primary_key}.
+    This flags every row in a duplicate group (e.g. 10 duplicate order_ids → 20 rows).
 
     Args:
         df: Input DataFrame (all rows retained).
         primary_key: Primary key column name.
-        ingestion_timestamp_col: Column used to determine first occurrence.
+        ingestion_timestamp_col: Unused; kept for API compatibility with callers.
 
     Returns:
         DataFrame with quality_uniqueness column added.
     """
-    # Tie-break duplicates by ingestion time so the earliest landed row passes
-    window_spec = Window.partitionBy(col(primary_key)).orderBy(
-        col(ingestion_timestamp_col).asc_nulls_last()
-    )
+    window_spec = Window.partitionBy(col(primary_key))
 
-    ranked_df = df.withColumn("_row_number", row_number().over(window_spec))
+    keyed_df = df.withColumn("_key_count", count(lit(1)).over(window_spec))
 
-    flagged_df = ranked_df.withColumn(
+    flagged_df = keyed_df.withColumn(
         "quality_uniqueness",
         when(
-            col("_row_number") == 1,
+            col("_key_count") == 1,
             lit("PASS"),
         ).otherwise(lit(f"FAIL: DUPLICATE {primary_key}")),
-    ).drop("_row_number")
+    ).drop("_key_count")
 
     return flagged_df
 
